@@ -1,0 +1,9 @@
+{
+  "aps": {
+    "alert": "Breaking News!",
+    "badge": 1,
+    "sound": "default",
+    "link_url": "https://news.google.com",
+    "category": "NEWS_CATEGORY"
+  }
+}

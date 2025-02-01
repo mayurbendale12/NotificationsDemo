@@ -1,14 +1,7 @@
-//
-//  ViewController.swift
-//  NotificationsDemo
-//
-//  Created by Mayur Bendale on 15/09/24.
-//
-
 import UIKit
 
+//Local Notifications
 class ViewController: UIViewController {
-
     override func viewDidLoad() {
         super.viewDidLoad()
         requestAutherization()
@@ -42,6 +35,10 @@ class ViewController: UIViewController {
     }
 
     private func scheduleLocalNotification() {
+        let center = UNUserNotificationCenter.current()
+        //Remove pending notifications
+        center.removeAllPendingNotificationRequests()
+
         // Create the notification content
         let content = UNMutableNotificationContent()
         content.title = "Local Notification"
@@ -70,7 +67,7 @@ class ViewController: UIViewController {
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
 
         // Schedule the notification
-        UNUserNotificationCenter.current().add(request) { error in
+        center.add(request) { error in
             if let error = error {
                 print("Error scheduling local notification: \(error.localizedDescription)")
             }
@@ -78,6 +75,10 @@ class ViewController: UIViewController {
     }
 
     private func scheduleLocalNotificationWithCustomAction() {
+        let center = UNUserNotificationCenter.current()
+        // Set the notification center delegate
+        center.delegate = self
+
         // Define the custom actions.
         let acceptAction = UNNotificationAction(identifier: "ACCEPT_ACTION",
                                                 title: "Accept",
@@ -86,29 +87,62 @@ class ViewController: UIViewController {
                                                  title: "Decline",
                                                  options: [.foreground])
         // Define the notification type
-        let meetingInviteCategory =
-              UNNotificationCategory(identifier: "MEETING_INVITATION",
-              actions: [acceptAction, declineAction],
-              intentIdentifiers: [],
-              hiddenPreviewsBodyPlaceholder: "",
-              options: .customDismissAction)
+        let identifier = "MEETING_INVITATION"
+        let meetingInviteCategory = UNNotificationCategory(identifier: identifier,
+                                                           actions: [acceptAction, declineAction],
+                                                           intentIdentifiers: [],
+                                                           hiddenPreviewsBodyPlaceholder: "")
         // Register the notification type.
-        UNUserNotificationCenter.current().setNotificationCategories([meetingInviteCategory])
+        center.setNotificationCategories([meetingInviteCategory])
 
         let content = UNMutableNotificationContent()
         content.title = "Weekly Staff Meeting"
         content.body = "Every Tuesday at 2pm"
         content.userInfo = ["MEETING_ID" : "M1234",
                             "USER_ID" : "U1234" ]
-        content.categoryIdentifier = "MEETING_INVITATION"
+        content.categoryIdentifier = identifier
+        content.sound = .default
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
 
-        UNUserNotificationCenter.current().add(request) { error in
+        center.add(request) { error in
             if let error = error {
                 print("Error scheduling local notification: \(error.localizedDescription)")
             }
         }
+    }
+}
+
+extension ViewController: UNUserNotificationCenterDelegate {
+    // Handle local notifications when the app is in foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // Display the notification with sound, badge, and alert
+        completionHandler([.banner, .sound, .badge])
+    }
+
+    // Handle user's response to the notification
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        let userInfo = response.notification.request.content.userInfo
+        // Handle notification response
+        print("Notification user info: \(userInfo)")
+        // Get the meeting ID from the original notification.
+        if let meetingID = userInfo["MEETING_ID"] as? String,
+           let userID = userInfo["USER_ID"] as? String {
+            print("Meeting ID: \(meetingID), User ID: \(userID)")
+        }
+
+        // Perform the task associated with the action.
+        switch response.actionIdentifier {
+        case "ACCEPT_ACTION":
+            print("Accept action")
+        case "DECLINE_ACTION":
+            print("Decline action")
+        default:
+            break
+        }
+
+        // Always call the completion handler when done.
+        completionHandler()
     }
 }

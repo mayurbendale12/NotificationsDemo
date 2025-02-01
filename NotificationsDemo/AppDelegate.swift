@@ -1,21 +1,61 @@
-//
-//  AppDelegate.swift
-//  NotificationsDemo
-//
-//  Created by Mayur Bendale on 15/09/24.
-//
-
 import UIKit
 
+enum Identifiers {
+  static let viewAction = "VIEW_IDENTIFIER"
+  static let newsCategory = "NEWS_CATEGORY"
+}
+
+//Use command to simulate push notifications
+//xcrun simctl push 05C0FFD7-445A-45D9-838A-9FC5645C430A com.msb.NotificationsDemo first.apn
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
+    //If app is not running and user launches it by tapping on push notification, iOS passes the notification to app in launchOptions
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Remote notification request permission
-        UIApplication.shared.registerForRemoteNotifications()
-        // Set the notification center delegate
-        UNUserNotificationCenter.current().delegate = self
+        //Handle push notifications
+        // Check if launched from notification
+        let notificationOption = launchOptions?[.remoteNotification]
 
+        if let notification = notificationOption as? [String: AnyObject],
+           let aps = notification["aps"] as? [String: AnyObject] {
+            print("Remote Push Notification did finish launching:", aps)
+        }
+
+        // Remote notification request permission
+        registerForPushNotifications()
         return true
+    }
+
+    private func registerForPushNotifications() {
+        UNUserNotificationCenter.current()
+          .requestAuthorization(
+            options: [.alert, .sound, .badge]) { [weak self] granted, _ in
+                print("Permission granted: \(granted)")
+                guard granted else { return }
+                //To add options in the push notification. This will add one View button when you tap and hold on the push notification
+                let viewAction = UNNotificationAction(
+                    identifier: Identifiers.viewAction,
+                    title: "View",
+                    options: [.foreground])
+                let newsCategory = UNNotificationCategory(
+                    identifier: Identifiers.newsCategory,
+                    actions: [viewAction],
+                    intentIdentifiers: [],
+                    options: []
+                )
+                UNUserNotificationCenter.current().setNotificationCategories([newsCategory])
+                self?.getNotificationSettings()
+          }
+    }
+
+    private func getNotificationSettings() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            print("Notification settings: \(settings)")
+            guard settings.authorizationStatus == .authorized else { return }
+            DispatchQueue.main.async {
+                //This generates the device token if succeed
+                UIApplication.shared.registerForRemoteNotifications()
+            }
+        }
     }
 
     // Called when APNs has successfully registered your device
@@ -23,41 +63,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         print("Device Token: \(token)")
         // Forward the token to your provider, using a custom method.
-        forwardTokenToServer(tokenString: token)
     }
 
     // Called when registration for remote notifications fails
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("Failed to register for remote notifications: \(error.localizedDescription)")
-    }
-
-    private func forwardTokenToServer(tokenString: String) {
-        print("Token: \(tokenString)")
-        let queryItems = [URLQueryItem(name: "deviceToken", value: tokenString)]
-        var urlComps = URLComponents(string: "www.example.com/register")!
-        urlComps.queryItems = queryItems
-        guard let url = urlComps.url else {
-            return
-        }
-
-        let task = URLSession.shared.dataTask(with: url) { (data: Data?, response: URLResponse?, error: Error?) in
-            if error != nil {
-                // Handle the error
-                return
-            }
-            guard response != nil else {
-                // Handle empty response
-                return
-            }
-            guard data != nil else {
-                // Handle empty data
-                return
-            }
-
-            // Handle data
-        }
-
-        task.resume()
     }
 
     // MARK: UISceneSession Lifecycle
@@ -90,72 +100,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
  }
  */
 
-extension AppDelegate: UNUserNotificationCenterDelegate {
-    // Handle push notifications when the app is in foreground
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        // Display the notification with sound, badge, and alert
-        completionHandler([.banner, .sound])
-    }
-
-    // Handle user's response to the notification
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        let userInfo = response.notification.request.content.userInfo
-        // Handle notification response
-        print("Notification user info: \(userInfo)")
-        // Get the meeting ID from the original notification.
-        let meetingID = userInfo["MEETING_ID"] as! String
-        let userID = userInfo["USER_ID"] as! String
-
-        // Perform the task associated with the action.
-        switch response.actionIdentifier {
-        case "ACCEPT_ACTION":
-            break
-        case "DECLINE_ACTION":
-            break
-        default:
-            break
-        }
-
-        // Always call the completion handler when done.
-        completionHandler()
-    }
-}
-
-//Handle background notification
+//Handle background/foreground push notification, this is when app is running
 extension AppDelegate {
-    func application(_ application: UIApplication,
-                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
-                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-        guard let url = URL(string: "www.example.com/todays-menu") else {
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        guard let aps = userInfo["aps"] as? [String: AnyObject] else {
             completionHandler(.failed)
             return
         }
-
-        let session = URLSession.shared.dataTask(with: url) { (data: Data?, response: URLResponse?, error: Error?) in
-            if let error = error {
-                print("Error fetching menu from server! \(error.localizedDescription)")
-                completionHandler(.failed)
-                return
-            }
-            guard response != nil else {
-                print("No response found fetching menu from the server")
-                completionHandler(.noData)
-                return
-            }
-            guard let data = data else {
-                print("No data found fetching menu from the server")
-                completionHandler(.noData)
-                return
-            }
-
-            self.updateMenu(withData: data)
-            completionHandler(.newData)
-        }
-
-        session.resume()
-    }
-
-    private func updateMenu(withData data: Data) {
-        // Use the data fetched to update the content of the application in the background.
+        print("Remote Push Notification did receive:", aps)
+        //Make changes in the app
+        completionHandler(.noData)
     }
 }

@@ -1,0 +1,13 @@
+{
+  "aps": {
+    "category": "new_podcast_available",
+    "alert": {
+      "title": "New Podcast Available",
+      "subtitle": "Clean Architecture",
+      "body": "This episode talks about Clean Architecture"
+    },
+    "mutable-content": 1
+  },
+  "podcast-image": "https://picsum.photos/200",
+  "podcast-guest": "ABC ZYZ"
+}
